@@ -37,4 +37,6 @@ private:
 
     CefRefPtr<CefLayer> client_;
     bool was_fullscreen_before_osd_ = false;
+    bool dark_boost_enabled_ = false;
+    int dark_boost_strength_ = 65;
 };

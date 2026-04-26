@@ -60,6 +60,8 @@
             this._endedPending = false;
             this._videoEqStorageKey = 'jmpVideoEq';
             this._videoEq = this.loadVideoEq();
+            this._darkBoostStorageKey = 'jmpDarkBoost';
+            this._darkBoost = this.loadDarkBoost();
 
             // Set up video-specific event handlers
             this._core.handlers.onPlaying = () => {
@@ -85,6 +87,7 @@
                 }
                 this._core.startTimeUpdateTimer();
                 this.applyVideoEq();
+                this.applyDarkBoost();
                 this.events.trigger(this, 'playing');
                 console.log('[Media] [MPV] playing event triggered');
             };
@@ -147,10 +150,37 @@
             } catch (_err) {}
         }
 
+        loadDarkBoost() {
+            const fallback = { enabled: true, strength: 65 };
+            try {
+                const raw = window.localStorage.getItem(this._darkBoostStorageKey);
+                if (!raw) return fallback;
+                const parsed = JSON.parse(raw);
+                return {
+                    enabled: typeof parsed?.enabled === 'boolean' ? parsed.enabled : fallback.enabled,
+                    strength: Number.isFinite(parsed?.strength) ? parsed.strength : fallback.strength
+                };
+            } catch (_err) {
+                return fallback;
+            }
+        }
+
+        saveDarkBoost() {
+            try {
+                window.localStorage.setItem(this._darkBoostStorageKey, JSON.stringify(this._darkBoost));
+            } catch (_err) {}
+        }
+
         applyVideoEq() {
             window.api.player.setBrightness(this._videoEq.brightness);
             window.api.player.setContrast(this._videoEq.contrast);
             window.api.player.setGamma(this._videoEq.gamma);
+        }
+
+        applyDarkBoost() {
+            const strength = Math.max(0, Math.min(100, this._darkBoost.strength));
+            window.api.player.setDarkBoostStrength(strength);
+            window.api.player.setDarkBoostEnabled(this._darkBoost.enabled);
         }
 
         createVideoEqControls(container) {
@@ -203,6 +233,65 @@
             panel.appendChild(makeRow('Contrast', 'contrast'));
             panel.appendChild(makeRow('Gamma', 'gamma'));
 
+            const darkBoostWrap = document.createElement('div');
+            darkBoostWrap.style.cssText = 'margin:10px 0 2px;';
+
+            const darkBoostHeader = document.createElement('div');
+            darkBoostHeader.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;';
+            const darkBoostLabel = document.createElement('span');
+            darkBoostLabel.textContent = 'Adaptive Dark Boost';
+            darkBoostLabel.style.cssText = 'font-size:13px;opacity:0.95;';
+            const darkBoostToggle = document.createElement('input');
+            darkBoostToggle.type = 'checkbox';
+            darkBoostToggle.checked = !!this._darkBoost.enabled;
+            darkBoostHeader.appendChild(darkBoostLabel);
+            darkBoostHeader.appendChild(darkBoostToggle);
+            darkBoostWrap.appendChild(darkBoostHeader);
+
+            const darkBoostRow = document.createElement('div');
+            darkBoostRow.style.cssText = 'display:flex;align-items:center;gap:10px;';
+            const darkBoostStrengthLabel = document.createElement('span');
+            darkBoostStrengthLabel.textContent = 'Strength';
+            darkBoostStrengthLabel.style.cssText = 'width:78px;font-size:13px;opacity:0.95;';
+            const darkBoostStrengthSlider = document.createElement('input');
+            darkBoostStrengthSlider.type = 'range';
+            darkBoostStrengthSlider.min = '0';
+            darkBoostStrengthSlider.max = '100';
+            darkBoostStrengthSlider.step = '1';
+            darkBoostStrengthSlider.value = String(this._darkBoost.strength);
+            darkBoostStrengthSlider.style.cssText = 'flex:1;';
+            const darkBoostStrengthValue = document.createElement('span');
+            darkBoostStrengthValue.textContent = String(this._darkBoost.strength);
+            darkBoostStrengthValue.style.cssText = 'width:34px;text-align:right;font-variant-numeric:tabular-nums;font-size:13px;';
+            darkBoostRow.appendChild(darkBoostStrengthLabel);
+            darkBoostRow.appendChild(darkBoostStrengthSlider);
+            darkBoostRow.appendChild(darkBoostStrengthValue);
+            darkBoostWrap.appendChild(darkBoostRow);
+
+            const syncDarkBoostUiState = () => {
+                const enabled = !!this._darkBoost.enabled;
+                darkBoostStrengthSlider.disabled = !enabled;
+                darkBoostStrengthValue.style.opacity = enabled ? '1' : '0.5';
+                darkBoostStrengthLabel.style.opacity = enabled ? '0.95' : '0.5';
+            };
+
+            darkBoostToggle.addEventListener('change', () => {
+                this._darkBoost.enabled = !!darkBoostToggle.checked;
+                this.applyDarkBoost();
+                this.saveDarkBoost();
+                syncDarkBoostUiState();
+            });
+
+            darkBoostStrengthSlider.addEventListener('input', () => {
+                this._darkBoost.strength = Number.parseInt(darkBoostStrengthSlider.value, 10) || 0;
+                darkBoostStrengthValue.textContent = String(this._darkBoost.strength);
+                this.applyDarkBoost();
+                this.saveDarkBoost();
+            });
+
+            syncDarkBoostUiState();
+            panel.appendChild(darkBoostWrap);
+
             const actions = document.createElement('div');
             actions.style.cssText = 'display:flex;justify-content:flex-end;margin-top:10px;';
             const reset = document.createElement('button');
@@ -214,6 +303,7 @@
                 const sliders = panel.querySelectorAll('input[type="range"]');
                 const values = panel.querySelectorAll('span[style*="tabular-nums"]');
                 sliders.forEach((slider, idx) => {
+                    if (idx > 2) return;
                     slider.value = '0';
                     if (values[idx]) values[idx].textContent = '0';
                 });

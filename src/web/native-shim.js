@@ -260,6 +260,14 @@
                 console.log('[Media] player.setGamma:', value);
                 if (window.jmpNative) window.jmpNative.playerSetGamma(Math.round(value));
             },
+            setDarkBoostEnabled(enabled) {
+                console.log('[Media] player.setDarkBoostEnabled:', enabled);
+                if (window.jmpNative) window.jmpNative.playerSetDarkBoostEnabled(!!enabled);
+            },
+            setDarkBoostStrength(value) {
+                console.log('[Media] player.setDarkBoostStrength:', value);
+                if (window.jmpNative) window.jmpNative.playerSetDarkBoostStrength(Math.round(value));
+            },
             setVideoRectangle(x, y, w, h) {
                 // No-op for now, we always render fullscreen
             },
