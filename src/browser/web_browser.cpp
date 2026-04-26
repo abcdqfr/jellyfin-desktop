@@ -82,7 +82,9 @@ CefRefPtr<CefDictionaryValue> WebBrowser::injectionProfile() {
         "playerLoad", "playerStop", "playerPause", "playerPlay", "playerSeek",
         "playerSetVolume", "playerSetMuted", "playerSetSpeed",
         "playerSetSubtitle", "playerAddSubtitle", "playerSetAudio",
-        "playerSetAudioDelay", "playerSetAspectMode", "playerOsdActive",
+        "playerSetAudioDelay", "playerSetAspectMode",
+        "playerSetBrightness", "playerSetContrast", "playerSetGamma",
+        "playerOsdActive",
         "saveServerUrl",
         "notifyMetadata", "notifyPosition", "notifySeek",
         "notifyPlaybackState", "notifyArtwork", "notifyQueueChange",
@@ -174,6 +176,12 @@ bool WebBrowser::handleMessage(const std::string& name,
         g_mpv.SetAudioDelay(args->GetDouble(0));
     } else if (name == "playerSetAspectMode") {
         g_mpv.SetAspectMode(args->GetString(0).ToString());
+    } else if (name == "playerSetBrightness") {
+        g_mpv.SetBrightness(getIntArg(args, 0));
+    } else if (name == "playerSetContrast") {
+        g_mpv.SetContrast(getIntArg(args, 0));
+    } else if (name == "playerSetGamma") {
+        g_mpv.SetGamma(getIntArg(args, 0));
     } else if (name == "playerOsdActive") {
         bool active = args->GetBool(0);
         if (active) {

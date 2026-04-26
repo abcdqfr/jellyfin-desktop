@@ -58,6 +58,8 @@
             this._timeUpdated = false;
             this._currentPlayOptions = undefined;
             this._endedPending = false;
+            this._videoEqStorageKey = 'jmpVideoEq';
+            this._videoEq = this.loadVideoEq();
 
             // Set up video-specific event handlers
             this._core.handlers.onPlaying = () => {
@@ -82,6 +84,7 @@
                     this.events.trigger(this, 'unpause');
                 }
                 this._core.startTimeUpdateTimer();
+                this.applyVideoEq();
                 this.events.trigger(this, 'playing');
                 console.log('[Media] [MPV] playing event triggered');
             };
@@ -120,6 +123,113 @@
                 console.error('[Media] media error:', error);
                 this.events.trigger(this, 'error', [{ type: 'mediadecodeerror' }]);
             };
+        }
+
+        loadVideoEq() {
+            const fallback = { brightness: 12, contrast: 22, gamma: 6 };
+            try {
+                const raw = window.localStorage.getItem(this._videoEqStorageKey);
+                if (!raw) return fallback;
+                const parsed = JSON.parse(raw);
+                return {
+                    brightness: Number.isFinite(parsed?.brightness) ? parsed.brightness : fallback.brightness,
+                    contrast: Number.isFinite(parsed?.contrast) ? parsed.contrast : fallback.contrast,
+                    gamma: Number.isFinite(parsed?.gamma) ? parsed.gamma : fallback.gamma
+                };
+            } catch (_err) {
+                return fallback;
+            }
+        }
+
+        saveVideoEq() {
+            try {
+                window.localStorage.setItem(this._videoEqStorageKey, JSON.stringify(this._videoEq));
+            } catch (_err) {}
+        }
+
+        applyVideoEq() {
+            window.api.player.setBrightness(this._videoEq.brightness);
+            window.api.player.setContrast(this._videoEq.contrast);
+            window.api.player.setGamma(this._videoEq.gamma);
+        }
+
+        createVideoEqControls(container) {
+            if (container.querySelector('.jmpEqToggle')) return;
+
+            const controls = document.createElement('div');
+            controls.className = 'jmpEqControls';
+            controls.style.cssText = 'position:absolute;top:16px;right:16px;z-index:1200;font-family:inherit;color:#fff;';
+
+            const toggle = document.createElement('button');
+            toggle.className = 'jmpEqToggle';
+            toggle.type = 'button';
+            toggle.textContent = 'Image Controls';
+            toggle.style.cssText = 'background:rgba(0,0,0,0.65);border:1px solid rgba(255,255,255,0.22);color:#fff;padding:8px 12px;border-radius:8px;cursor:pointer;';
+
+            const panel = document.createElement('div');
+            panel.className = 'jmpEqPanel';
+            panel.style.cssText = 'display:none;margin-top:8px;min-width:260px;background:rgba(0,0,0,0.78);border:1px solid rgba(255,255,255,0.2);border-radius:10px;padding:12px;backdrop-filter:blur(3px);';
+
+            const makeRow = (label, key) => {
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex;align-items:center;gap:10px;margin:8px 0;';
+                const title = document.createElement('span');
+                title.textContent = label;
+                title.style.cssText = 'width:78px;font-size:13px;opacity:0.95;';
+                const slider = document.createElement('input');
+                slider.type = 'range';
+                slider.min = '-100';
+                slider.max = '100';
+                slider.step = '1';
+                slider.value = String(this._videoEq[key]);
+                slider.style.cssText = 'flex:1;';
+                const value = document.createElement('span');
+                value.textContent = String(this._videoEq[key]);
+                value.style.cssText = 'width:34px;text-align:right;font-variant-numeric:tabular-nums;font-size:13px;';
+                slider.addEventListener('input', () => {
+                    const nextVal = Number.parseInt(slider.value, 10) || 0;
+                    this._videoEq[key] = nextVal;
+                    value.textContent = String(nextVal);
+                    this.applyVideoEq();
+                    this.saveVideoEq();
+                });
+                row.appendChild(title);
+                row.appendChild(slider);
+                row.appendChild(value);
+                return row;
+            };
+
+            panel.appendChild(makeRow('Brightness', 'brightness'));
+            panel.appendChild(makeRow('Contrast', 'contrast'));
+            panel.appendChild(makeRow('Gamma', 'gamma'));
+
+            const actions = document.createElement('div');
+            actions.style.cssText = 'display:flex;justify-content:flex-end;margin-top:10px;';
+            const reset = document.createElement('button');
+            reset.type = 'button';
+            reset.textContent = 'Reset';
+            reset.style.cssText = 'background:#1f2937;border:1px solid rgba(255,255,255,0.22);color:#fff;padding:6px 10px;border-radius:8px;cursor:pointer;';
+            reset.addEventListener('click', () => {
+                this._videoEq = { brightness: 0, contrast: 0, gamma: 0 };
+                const sliders = panel.querySelectorAll('input[type="range"]');
+                const values = panel.querySelectorAll('span[style*="tabular-nums"]');
+                sliders.forEach((slider, idx) => {
+                    slider.value = '0';
+                    if (values[idx]) values[idx].textContent = '0';
+                });
+                this.applyVideoEq();
+                this.saveVideoEq();
+            });
+            actions.appendChild(reset);
+            panel.appendChild(actions);
+
+            toggle.addEventListener('click', () => {
+                panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+            });
+
+            controls.appendChild(toggle);
+            controls.appendChild(panel);
+            container.appendChild(controls);
         }
 
         currentSrc() { return this._currentSrc; }
@@ -283,6 +393,7 @@
             } else {
                 this._videoDialog = dlg;
             }
+            this.createVideoEqControls(dlg);
             if (options.backdropUrl) {
                 const existing = dlg.querySelector('.mpvPoster');
                 if (existing) existing.remove();
@@ -333,8 +444,12 @@
         isPictureInPictureEnabled() { return false; }
         isAirPlayEnabled() { return false; }
         setAirPlayEnabled() {}
-        setBrightness() {}
-        getBrightness() { return 100; }
+        setBrightness(value) {
+            this._videoEq.brightness = Number.isFinite(value) ? value : this._videoEq.brightness;
+            this.applyVideoEq();
+            this.saveVideoEq();
+        }
+        getBrightness() { return this._videoEq.brightness; }
 
         saveVolume(value) { this._core.saveVolume(value); }
         getSavedVolume() { return this._core.getSavedVolume(); }

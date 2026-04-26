@@ -95,6 +95,9 @@ public:
     void SetVolume(double vol)           { SetPropertyDoubleAsync("volume", vol); }
     void SetMuted(bool muted)            { SetPropertyFlagAsync("mute", muted); }
     void SetSpeed(double rate)           { SetPropertyDoubleAsync("speed", rate); }
+    void SetBrightness(double value)     { SetPropertyDoubleAsync("brightness", value); }
+    void SetContrast(double value)       { SetPropertyDoubleAsync("contrast", value); }
+    void SetGamma(double value)          { SetPropertyDoubleAsync("gamma", value); }
     void SetAudioTrack(int64_t id)       { SetPropertyIntAsync("aid", id); }
     void SetSubtitleTrack(int64_t id)    { SetPropertyIntAsync("sid", id); }
     void SetAudioDelay(double secs)      { SetPropertyDoubleAsync("audio-delay", secs); }
