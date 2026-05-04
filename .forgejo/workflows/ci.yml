@@ -2,11 +2,8 @@
 # Requires act_runner with Docker + label matching runs-on (see infrastructure/forgejo README).
 name: CI
 
-on:
-  push:
-    branches:
-      - "**"
-  pull_request:
+# Match all branches (including slashes); explicit "**" glob omits feature/foo on some runners.
+on: [push, pull_request]
 
 jobs:
   appimage-docker-smoke:
