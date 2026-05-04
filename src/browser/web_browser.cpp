@@ -1,6 +1,8 @@
 #include "web_browser.h"
 #include "app_menu.h"
 #include "browsers.h"
+#include <algorithm>
+#include <cstdio>
 #include <cmath>
 #include "../common.h"
 #include "../settings.h"
@@ -77,6 +79,34 @@ static int getIntArg(CefRefPtr<CefListValue> args, size_t idx) {
     return args->GetInt(idx);
 }
 
+static std::string buildDarkBoostFilter(int strength) {
+    const int clamped = std::max(0, std::min(100, strength));
+    const double s = clamped / 100.0;
+    const double brightness = 0.01 + (0.08 * s);
+    const double contrast = 1.01 + (0.11 * s);
+    const double gamma = 1.04 + (0.26 * s);
+    const double gammaWeight = 0.95 - (0.40 * s);
+
+    char filter[256];
+    std::snprintf(
+        filter,
+        sizeof(filter),
+        "lavfi=[eq=brightness=%.3f:contrast=%.3f:gamma=%.3f:gamma_weight=%.3f]",
+        brightness,
+        contrast,
+        gamma,
+        gammaWeight);
+    return std::string(filter);
+}
+
+static void applyDarkBoostFilter(bool enabled, int strength) {
+    static constexpr const char* kDarkBoostFilterLabel = "jmp-dark-boost";
+    g_mpv.RemoveVideoFilter(kDarkBoostFilterLabel);
+    if (enabled) {
+        g_mpv.AddVideoFilter(kDarkBoostFilterLabel, buildDarkBoostFilter(strength));
+    }
+}
+
 // =====================================================================
 // WebBrowser
 // =====================================================================
@@ -86,7 +116,10 @@ CefRefPtr<CefDictionaryValue> WebBrowser::injectionProfile() {
         "playerLoad", "playerStop", "playerPause", "playerPlay", "playerSeek",
         "playerSetVolume", "playerSetMuted", "playerSetSpeed",
         "playerSetSubtitle", "playerAddSubtitle", "playerSetAudio", "playerAddAudio",
-        "playerSetAudioDelay", "playerSetAspectMode", "playerOsdActive",
+        "playerSetAudioDelay", "playerSetAspectMode",
+        "playerSetBrightness", "playerSetContrast", "playerSetGamma",
+        "playerSetDarkBoostEnabled", "playerSetDarkBoostStrength",
+        "playerOsdActive",
         "openConfigDir", "saveServerUrl",
         "notifyMetadata", "notifyPosition", "notifySeek",
         "notifyPlaybackState", "notifyArtwork", "notifyQueueChange",
@@ -196,6 +229,18 @@ bool WebBrowser::handleMessage(const std::string& name,
         g_mpv.SetAudioDelay(args->GetDouble(0));
     } else if (name == "playerSetAspectMode") {
         g_mpv.SetAspectMode(args->GetString(0).ToString());
+    } else if (name == "playerSetBrightness") {
+        g_mpv.SetBrightness(getIntArg(args, 0));
+    } else if (name == "playerSetContrast") {
+        g_mpv.SetContrast(getIntArg(args, 0));
+    } else if (name == "playerSetGamma") {
+        g_mpv.SetGamma(getIntArg(args, 0));
+    } else if (name == "playerSetDarkBoostEnabled") {
+        dark_boost_enabled_ = args->GetBool(0);
+        applyDarkBoostFilter(dark_boost_enabled_, dark_boost_strength_);
+    } else if (name == "playerSetDarkBoostStrength") {
+        dark_boost_strength_ = getIntArg(args, 0);
+        applyDarkBoostFilter(dark_boost_enabled_, dark_boost_strength_);
     } else if (name == "playerOsdActive") {
         bool active = args->GetBool(0);
         if (active) {

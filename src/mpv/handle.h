@@ -95,6 +95,15 @@ public:
     void SetVolume(double vol)           { SetPropertyDoubleAsync("volume", vol); }
     void SetMuted(bool muted)            { SetPropertyFlagAsync("mute", muted); }
     void SetSpeed(double rate)           { SetPropertyDoubleAsync("speed", rate); }
+    void SetBrightness(double value)     { SetPropertyDoubleAsync("brightness", value); }
+    void SetContrast(double value)       { SetPropertyDoubleAsync("contrast", value); }
+    void SetGamma(double value)          { SetPropertyDoubleAsync("gamma", value); }
+    void AddVideoFilter(const std::string& label, const std::string& filter) {
+        CommandAsync({"vf", "add", "@" + label + ":" + filter});
+    }
+    void RemoveVideoFilter(const std::string& label) {
+        CommandAsync({"vf", "remove", "@" + label});
+    }
     void SetAudioTrack(int64_t id)       { SetPropertyStringAsync("aid", TrackToMpvStr(id)); }
     void SetSubtitleTrack(int64_t id)    { SetPropertyStringAsync("sid", TrackToMpvStr(id)); }
     void SetAudioDelay(double secs)      { SetPropertyDoubleAsync("audio-delay", secs); }

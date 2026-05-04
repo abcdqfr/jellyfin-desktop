@@ -49,6 +49,11 @@
             this._currentPlayOptions = undefined;
             this._endedPending = false;
 
+            this._videoEqStorageKey = 'jmpVideoEq';
+            this._videoEq = this.loadVideoEq();
+            this._darkBoostStorageKey = 'jmpDarkBoost';
+            this._darkBoost = this.loadDarkBoost();
+
             // Support jellyfin-web v10.10.7
             this._currentAspectRatio = undefined;
 
@@ -69,6 +74,8 @@
                     }
                     window.api.player.setVideoRectangle(0, 0, 0, 0);
                 }
+                this.applyVideoEq();
+                this.applyDarkBoost();
                 this._emitPlaying();
             };
 
@@ -91,6 +98,200 @@
                 console.error(`[Media] [${this.logTag}] media error:`, error);
                 this.events.trigger(this, 'error', [{ type: 'mediadecodeerror' }]);
             };
+        }
+
+        loadVideoEq() {
+            const fallback = { brightness: 0, contrast: 0, gamma: 0 };
+            try {
+                const raw = window.localStorage.getItem(this._videoEqStorageKey);
+                if (!raw) return fallback;
+                const parsed = JSON.parse(raw);
+                return {
+                    brightness: Number.isFinite(parsed?.brightness) ? parsed.brightness : fallback.brightness,
+                    contrast: Number.isFinite(parsed?.contrast) ? parsed.contrast : fallback.contrast,
+                    gamma: Number.isFinite(parsed?.gamma) ? parsed.gamma : fallback.gamma
+                };
+            } catch (_err) {
+                return fallback;
+            }
+        }
+
+        saveVideoEq() {
+            try {
+                window.localStorage.setItem(this._videoEqStorageKey, JSON.stringify(this._videoEq));
+            } catch (_err) {}
+        }
+
+        loadDarkBoost() {
+            const fallback = { enabled: false, strength: 65 };
+            try {
+                const raw = window.localStorage.getItem(this._darkBoostStorageKey);
+                if (!raw) return fallback;
+                const parsed = JSON.parse(raw);
+                return {
+                    enabled: typeof parsed?.enabled === 'boolean' ? parsed.enabled : fallback.enabled,
+                    strength: Number.isFinite(parsed?.strength) ? parsed.strength : fallback.strength
+                };
+            } catch (_err) {
+                return fallback;
+            }
+        }
+
+        saveDarkBoost() {
+            try {
+                window.localStorage.setItem(this._darkBoostStorageKey, JSON.stringify(this._darkBoost));
+            } catch (_err) {}
+        }
+
+        applyVideoEq() {
+            window.api.player.setBrightness(this._videoEq.brightness);
+            window.api.player.setContrast(this._videoEq.contrast);
+            window.api.player.setGamma(this._videoEq.gamma);
+        }
+
+        applyDarkBoost() {
+            const strength = Math.max(0, Math.min(100, this._darkBoost.strength));
+            window.api.player.setDarkBoostStrength(strength);
+            window.api.player.setDarkBoostEnabled(this._darkBoost.enabled);
+        }
+
+        createVideoEqControls(container) {
+            if (container.querySelector('.jmpEqToggle')) return;
+
+            const controls = document.createElement('div');
+            controls.className = 'jmpEqControls';
+            controls.style.cssText = 'position:absolute;top:16px;right:16px;z-index:1200;font-family:inherit;color:#fff;';
+
+            const toggle = document.createElement('button');
+            toggle.className = 'jmpEqToggle';
+            toggle.type = 'button';
+            toggle.textContent = 'Image Controls';
+            toggle.style.cssText = 'background:rgba(0,0,0,0.65);border:1px solid rgba(255,255,255,0.22);color:#fff;padding:8px 12px;border-radius:8px;cursor:pointer;';
+
+            const panel = document.createElement('div');
+            panel.className = 'jmpEqPanel';
+            panel.style.cssText = 'display:none;margin-top:8px;min-width:260px;background:rgba(0,0,0,0.78);border:1px solid rgba(255,255,255,0.2);border-radius:10px;padding:12px;backdrop-filter:blur(3px);';
+
+            const makeRow = (label, key) => {
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex;align-items:center;gap:10px;margin:8px 0;';
+                const title = document.createElement('span');
+                title.textContent = label;
+                title.style.cssText = 'width:78px;font-size:13px;opacity:0.95;';
+                const slider = document.createElement('input');
+                slider.type = 'range';
+                slider.min = '-100';
+                slider.max = '100';
+                slider.step = '1';
+                slider.value = String(this._videoEq[key]);
+                slider.style.cssText = 'flex:1;';
+                const value = document.createElement('span');
+                value.textContent = String(this._videoEq[key]);
+                value.style.cssText = 'width:34px;text-align:right;font-variant-numeric:tabular-nums;font-size:13px;';
+                slider.addEventListener('input', () => {
+                    const nextVal = Number.parseInt(slider.value, 10) || 0;
+                    this._videoEq[key] = nextVal;
+                    value.textContent = String(nextVal);
+                    this.applyVideoEq();
+                    this.saveVideoEq();
+                });
+                row.appendChild(title);
+                row.appendChild(slider);
+                row.appendChild(value);
+                return row;
+            };
+
+            panel.appendChild(makeRow('Brightness', 'brightness'));
+            panel.appendChild(makeRow('Contrast', 'contrast'));
+            panel.appendChild(makeRow('Gamma', 'gamma'));
+
+            const darkBoostWrap = document.createElement('div');
+            darkBoostWrap.style.cssText = 'margin:10px 0 2px;';
+
+            const darkBoostHeader = document.createElement('div');
+            darkBoostHeader.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;';
+            const darkBoostLabel = document.createElement('span');
+            darkBoostLabel.textContent = 'Adaptive Dark Boost';
+            darkBoostLabel.style.cssText = 'font-size:13px;opacity:0.95;';
+            const darkBoostToggle = document.createElement('input');
+            darkBoostToggle.type = 'checkbox';
+            darkBoostToggle.checked = !!this._darkBoost.enabled;
+            darkBoostHeader.appendChild(darkBoostLabel);
+            darkBoostHeader.appendChild(darkBoostToggle);
+            darkBoostWrap.appendChild(darkBoostHeader);
+
+            const darkBoostRow = document.createElement('div');
+            darkBoostRow.style.cssText = 'display:flex;align-items:center;gap:10px;';
+            const darkBoostStrengthLabel = document.createElement('span');
+            darkBoostStrengthLabel.textContent = 'Strength';
+            darkBoostStrengthLabel.style.cssText = 'width:78px;font-size:13px;opacity:0.95;';
+            const darkBoostStrengthSlider = document.createElement('input');
+            darkBoostStrengthSlider.type = 'range';
+            darkBoostStrengthSlider.min = '0';
+            darkBoostStrengthSlider.max = '100';
+            darkBoostStrengthSlider.step = '1';
+            darkBoostStrengthSlider.value = String(this._darkBoost.strength);
+            darkBoostStrengthSlider.style.cssText = 'flex:1;';
+            const darkBoostStrengthValue = document.createElement('span');
+            darkBoostStrengthValue.textContent = String(this._darkBoost.strength);
+            darkBoostStrengthValue.style.cssText = 'width:34px;text-align:right;font-variant-numeric:tabular-nums;font-size:13px;';
+            darkBoostRow.appendChild(darkBoostStrengthLabel);
+            darkBoostRow.appendChild(darkBoostStrengthSlider);
+            darkBoostRow.appendChild(darkBoostStrengthValue);
+            darkBoostWrap.appendChild(darkBoostRow);
+
+            const syncDarkBoostUiState = () => {
+                const enabled = !!this._darkBoost.enabled;
+                darkBoostStrengthSlider.disabled = !enabled;
+                darkBoostStrengthValue.style.opacity = enabled ? '1' : '0.5';
+                darkBoostStrengthLabel.style.opacity = enabled ? '0.95' : '0.5';
+            };
+
+            darkBoostToggle.addEventListener('change', () => {
+                this._darkBoost.enabled = !!darkBoostToggle.checked;
+                this.applyDarkBoost();
+                this.saveDarkBoost();
+                syncDarkBoostUiState();
+            });
+
+            darkBoostStrengthSlider.addEventListener('input', () => {
+                this._darkBoost.strength = Number.parseInt(darkBoostStrengthSlider.value, 10) || 0;
+                darkBoostStrengthValue.textContent = String(this._darkBoost.strength);
+                this.applyDarkBoost();
+                this.saveDarkBoost();
+            });
+
+            syncDarkBoostUiState();
+            panel.appendChild(darkBoostWrap);
+
+            const actions = document.createElement('div');
+            actions.style.cssText = 'display:flex;justify-content:flex-end;margin-top:10px;';
+            const reset = document.createElement('button');
+            reset.type = 'button';
+            reset.textContent = 'Reset';
+            reset.style.cssText = 'background:#1f2937;border:1px solid rgba(255,255,255,0.22);color:#fff;padding:6px 10px;border-radius:8px;cursor:pointer;';
+            reset.addEventListener('click', () => {
+                this._videoEq = { brightness: 0, contrast: 0, gamma: 0 };
+                const sliders = panel.querySelectorAll('input[type="range"]');
+                const values = panel.querySelectorAll('span[style*="tabular-nums"]');
+                sliders.forEach((slider, idx) => {
+                    if (idx > 2) return;
+                    slider.value = '0';
+                    if (values[idx]) values[idx].textContent = '0';
+                });
+                this.applyVideoEq();
+                this.saveVideoEq();
+            });
+            actions.appendChild(reset);
+            panel.appendChild(actions);
+
+            toggle.addEventListener('click', () => {
+                panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+            });
+
+            controls.appendChild(toggle);
+            controls.appendChild(panel);
+            container.appendChild(controls);
         }
 
         async play(options) {
@@ -272,6 +473,7 @@
                 if (window.jmpNative) {
                     window.jmpNative.notifyRateChange(this._playRate);
                 }
+                this.createVideoEqControls(dlg);
             } else {
                 this._videoDialog = dlg;
             }
@@ -309,8 +511,16 @@
         isPictureInPictureEnabled() { return false; }
         isAirPlayEnabled() { return false; }
         setAirPlayEnabled() {}
-        setBrightness() {}
-        getBrightness() { return 100; }
+        setBrightness(val) {
+            if (!Number.isFinite(val)) return;
+            this._videoEq.brightness = val;
+            this.applyVideoEq();
+            this.saveVideoEq();
+        }
+
+        getBrightness() {
+            return this._videoEq.brightness;
+        }
 
         togglePictureInPicture() {}
         toggleAirPlay() {}

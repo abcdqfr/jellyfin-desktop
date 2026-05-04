@@ -269,6 +269,21 @@
                 console.log('[Media] player.setAspectMode:', mode);
                 if (window.jmpNative) window.jmpNative.playerSetAspectMode(mode);
             },
+            setBrightness(value) {
+                if (window.jmpNative) window.jmpNative.playerSetBrightness(Math.round(value));
+            },
+            setContrast(value) {
+                if (window.jmpNative) window.jmpNative.playerSetContrast(Math.round(value));
+            },
+            setGamma(value) {
+                if (window.jmpNative) window.jmpNative.playerSetGamma(Math.round(value));
+            },
+            setDarkBoostEnabled(enabled) {
+                if (window.jmpNative) window.jmpNative.playerSetDarkBoostEnabled(!!enabled);
+            },
+            setDarkBoostStrength(value) {
+                if (window.jmpNative) window.jmpNative.playerSetDarkBoostStrength(Math.round(value));
+            },
             setVideoRectangle(x, y, w, h) {
                 // No-op for now, we always render fullscreen
             },
